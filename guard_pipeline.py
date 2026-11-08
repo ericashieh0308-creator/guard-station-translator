@@ -4,7 +4,7 @@ import subprocess
 import sys
 from pathlib import Path
 from transformers import M2M100ForConditionalGeneration, M2M100Tokenizer
-
+from approved_translations import get_approved_translation
 # Step 1: Check audio file
 audio_file = Path("guard_test.wav")
 
@@ -57,41 +57,55 @@ if choice not in languages:
 language_name, target_language = languages[choice]
 print(f"\nSelected language: {language_name}")
 
-# Step 4: Load M2M100 translation model
-print("\nLoading M2M100 translation model...")
 
-model_name = "facebook/m2m100_418M"
+# Step 4: Check human-approved translation library
+print("\nChecking approved translation library...")
 
-try:
-    tokenizer = M2M100Tokenizer.from_pretrained(model_name)
-    translation_model = M2M100ForConditionalGeneration.from_pretrained(
-        model_name
-    )
+translated_text = get_approved_translation(
+    english_text,
+    target_language
+)
 
-    tokenizer.src_lang = "en"
+if translated_text is not None:
+    print("Using a human-approved standard translation.")
 
-    inputs = tokenizer(
-        english_text,
-        return_tensors="pt"
-    )
+else:
+    # Step 5: Use M2M100 when no approved translation exists
+    print("No approved translation found.")
+    print("Loading M2M100 translation model...")
 
-    # Step 5: Translate to selected language
-    translated_tokens = translation_model.generate(
-        **inputs,
-        forced_bos_token_id=tokenizer.get_lang_id(target_language),
-        max_new_tokens=100
-    )
+    model_name = "facebook/m2m100_418M"
 
-    translated_text = tokenizer.batch_decode(
-        translated_tokens,
-        skip_special_tokens=True
-    )[0].strip()
+    try:
+        tokenizer = M2M100Tokenizer.from_pretrained(model_name)
+        translation_model = M2M100ForConditionalGeneration.from_pretrained(
+            model_name
+        )
 
-except Exception as error:
-    print("\nError: Translation failed.")
-    print("Translation cancelled. No message will be shown to the visitor.")
-    print(f"Technical details: {type(error).__name__}")
-    sys.exit(1)
+        tokenizer.src_lang = "en"
+
+        inputs = tokenizer(
+            english_text,
+            return_tensors="pt"
+        )
+
+        translated_tokens = translation_model.generate(
+            **inputs,
+            forced_bos_token_id=tokenizer.get_lang_id(target_language),
+            max_new_tokens=100
+        )
+
+        translated_text = tokenizer.batch_decode(
+            translated_tokens,
+            skip_special_tokens=True
+        )[0].strip()
+
+    except Exception as error:
+        print("\nError: Translation failed.")
+        print("Translation cancelled. No message will be shown to the visitor.")
+        print(f"Technical details: {type(error).__name__}")
+        sys.exit(1)
+
 
 if not translated_text:
     print("\nError: Translation returned empty text.")
